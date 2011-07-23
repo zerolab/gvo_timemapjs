@@ -1,0 +1,6 @@
+name		= GVO Timemap.js
+description	= Customized Timemap implementation
+core = 6.x
+
+package = "Global Voices Timemap"
+version		= "6.x-1.x-dev"

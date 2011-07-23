@@ -1,0 +1,150 @@
+<?php
+
+/**
+ * @file
+ *
+ * @TODO add Google Maps API key as own variable
+ */
+
+function gvo_timemapjs_menu() {
+  $items['api/json/items'] = array(
+    'page callback' => 'gvo_timemapjs_json',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );
+
+  $items['timemap'] = array(
+    'page callback' => 'gvo_timemapjs_page',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );
+
+return $items;
+}
+
+function gvo_timemapjs_block($op = 'list', $delta = 0, $edit = array() ) {
+
+	switch($op) {
+		case 'list':
+	    $blocks[0] = array(
+	      'info' => 'Timemap Container',
+	      'cache' => BLOCK_CACHE_PER_ROLE | BLOCK_CACHE_PER_PAGE,
+	    );
+
+      return $blocks;
+      break;
+
+		case 'view':
+	    if ($delta == 0) {
+	    		gvo_timemapjs_header();
+	        $block = array(
+	          'content' => <<<EOD
+<div id="timemap">
+	<div id="mapcontainer">
+		<div id="map"></div>
+	</div>
+	<div id="timelinecontainer">
+		<div id="timeline"></div>
+	</div>
+</div>
+EOD
+	        );
+	    }
+
+	    return $block;
+			break;
+
+		default:
+			break;
+	}
+}
+
+function gvo_timemapjs_header() {
+  drupal_set_html_head('<script type="text/javascript" src="http://maps.google.com/maps?file=api&v=2&key='.
+    (function_exists('gmap_get_key') ? gmap_get_key() : ''). '&amp;hl=en"></script>');
+
+//*/
+  $timeline_api = drupal_get_path('module', 'gvo_timemapjs'). '/js/lib/timeline-2.3.0.js';
+  drupal_set_html_head("<script type=\"text/javascript\" src=\"{$timeline_api}\"></script>");
+//*/
+
+  drupal_add_js(drupal_get_path('module', 'gvo_timemapjs').'/js/timemap.min.js');
+  drupal_add_js(drupal_get_path('module', 'gvo_timemapjs').'/js/loaders/json.min.js');
+  drupal_add_js(drupal_get_path('module', 'gvo_timemapjs').'/js/gvo_timemap.js');
+}
+
+/**
+ * Function to return blogger marker info as JSON
+ *
+ * @TODO CACHE, CACHE, CACHE
+ */
+function gvo_timemapjs_json() {
+
+  $result = db_query("SELECT n.nid AS nid, n.title AS title, r.teaser,
+            DATE(ct.field_item_date_value) AS start, DATE(ct.field_item_date_value2) AS end,
+            l.name AS location_name, l.city AS location_city, l.country AS country,
+            l.latitude AS lat, l.longitude AS lon
+            FROM {node} n
+            LEFT JOIN {node_revisions} r on n.vid = r.vid
+            LEFT JOIN {content_type_item} ct ON n.vid = ct.vid
+            LEFT JOIN {location} l ON l.lid = ct.field_item_location_lid
+            WHERE n.type = 'item' AND n.status <> 0
+            ORDER BY nid ASC");
+
+  $items = array();
+
+  while ($item = db_fetch_object($result)) {
+
+    if ($item->start == NULL || !$item->lat || !$item->lon)
+      continue;
+
+    $note = '';
+    $data = array();
+    $data['start'] = $item->start;
+
+    if ($item->end && $item->start != $item->end) {
+      $data['end'] = $item->end;
+    }
+
+
+    $more = l('Read more', 'node/'.$item->nid);
+
+    $data['title'] = $item->title;
+    $data['options'] = array(
+      'description' => $item->teaser .' '. $more,
+      'theme' => 'blue',
+      'url' => url('node/'.$item->nid),
+    );
+
+    if ($item->start)
+      $data['point'] = array(
+        'lat' => $item->lat,
+        'lon' => $item->lon
+      );
+
+    $items[] = $data;
+  }
+
+  $callback = $_GET['callback'] ? $_GET['callback'] : '';
+  $json = $callback.'({"items":' . drupal_to_js($items) .'})';
+  drupal_set_header('Content-Type: text/javascript; charset=utf-8');
+
+  print $json;
+}
+
+function gvo_timemapjs_page() {
+  gvo_timemapjs_header();
+
+  $content = <<<EOD
+<div id="timemap">
+	<div id="mapcontainer">
+		<div id="map"></div>
+	</div>
+	<div id="timelinecontainer">
+		<div id="timeline"></div>
+	</div>
+</div>
+EOD;
+
+  return $content;
+}
